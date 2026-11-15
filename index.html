@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sun Check">
+<meta name="theme-color" content="#f6f5f2">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Sun Exposure Checker – terrain horizon &amp; sun hours</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--sun:#e8890c;--sun2:#f6c26b;--bg:#f6f5f2;--card:#fff;--ink:#1d232b;--mute:#6b7280;--line:#e3e1dc;--blue:#2f6fb3}
+*{box-sizing:border-box}
+body{margin:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:14px 18px 6px}
+h1{font-size:19px;margin:0 0 2px}
+h2{font-size:15px;margin:0 0 8px}
+.sub{color:var(--mute);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end;padding:8px 18px 12px}
+.controls label{display:flex;flex-direction:column;font-size:11px;color:var(--mute);gap:2px}
+input,select,button{font:inherit}
+input[type=text],input[type=number],input[type=date],select{padding:6px 8px;border:1px solid #cfccc5;border-radius:7px;background:#fff;min-width:0}
+#q{width:290px}
+.num{width:76px}
+button{padding:7px 13px;border-radius:7px;border:1px solid #cfccc5;background:#fff;cursor:pointer}
+button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+button:disabled{opacity:.5;cursor:default}
+main{display:grid;grid-template-columns:minmax(320px,1fr) minmax(380px,1.35fr);gap:14px;padding:0 18px 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.full{grid-column:1/-1}
+#map{height:440px;border-radius:9px}
+#status{font-size:12px;color:var(--mute);min-height:18px;margin-top:6px}
+.bar{height:4px;background:#eee;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar>div{height:100%;width:0;background:var(--sun);transition:width .2s}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.kpi .v{font-size:21px;font-weight:650}
+.kpi .l{font-size:11.5px;color:var(--mute)}
+.kpi .s{font-size:11.5px;color:var(--mute)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 7px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--mute);font-size:12px}
+.scroll{overflow-x:auto}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mute);margin-top:4px;align-items:center}
+.legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.grad{display:inline-block;width:90px;height:9px;border-radius:3px;vertical-align:middle;margin:0 5px;background:linear-gradient(90deg,#d64b3c,#e9a825,#3b78c9)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{display:inline-block;background:#fdf1de;color:#8a4b00;border-radius:20px;padding:2px 9px;margin:2px 4px 2px 0;font-size:12.5px}
+.pill.off{background:#eef0f3;color:var(--mute)}
+.notes{font-size:12.5px;color:#444}
+.notes li{margin:3px 0}
+a{color:var(--blue)}
+.warn{color:#9a3b00}
+.ok{color:#2c7a3f}
+#xcheck table{font-size:12.5px;margin-top:8px}
+.mainrow{display:flex;gap:8px;align-items:flex-end}
+#opts summary{cursor:pointer;color:var(--mute);font-size:13px;padding:4px 0}
+.optgrid{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end;margin-top:4px}
+.chartwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+main>section{min-width:0}
+footer{color:#999;font-size:11.5px;padding:0 18px 18px}
+@media (max-width:900px){main{grid-template-columns:1fr}#q{width:100%}}
+@media (max-width:700px){
+  header{padding:10px 12px 2px} h1{font-size:17px} header .sub{display:none}
+  .controls{padding:6px 10px 10px;gap:6px}
+  .mainrow{width:100%} .mainrow label{flex:1} #q{width:100%;font-size:16px}
+  #opts{width:100%} .actions{width:100%} .actions button{flex:1}
+  main{padding:0 8px 12px;gap:10px} .card{padding:10px;border-radius:10px}
+  #map{height:300px}
+  .chartwrap svg{min-width:680px} #yrChart.chartwrap svg{min-width:620px}
+  .kpis{grid-template-columns:1fr 1fr;gap:8px} .kpi{padding:7px 9px} .kpi .v{font-size:18px}
+  input[type=number]{font-size:16px} footer{padding:0 12px 14px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>☀️ Sun Exposure Checker</h1>
+  <div class="sub">Real terrain horizon from high-resolution elevation data (neighbouring mountains, earth curvature &amp; refraction included) → direct-sun hours for every day of the year. Click the map, paste coordinates or search a place.</div>
+</header>
+
+<div class="controls">
+  <div class="mainrow">
+    <label>Place or coordinates
+      <input id="q" type="text" placeholder="47.0742, 12.6939 · hut name · Maps link" autocomplete="off">
+    </label>
+    <button id="go" class="primary">Analyse</button>
+    <button id="locBtn" title="Use my location">📍</button>
+  </div>
+  <details id="opts"><summary>Settings</summary><div class="optgrid">
+  <label>Elevation data
+    <select id="src"><option value="mapterhorn">Mapterhorn (LiDAR where available)</option><option value="aws">AWS Terrain Tiles (Mapzen)</option></select>
+  </label>
+  <label>Height above ground (m)<input id="hag" class="num" type="number" value="2" step="0.5"></label>
+  <label>Elevation override (m)<input id="elevOv" class="num" type="number" placeholder="DEM"></label>
+  <label>Horizon range (km)<input id="range" class="num" type="number" value="60" min="5" max="120"></label>
+  <label>Ignore terrain &lt; (m)<input id="dmin" class="num" type="number" value="25" min="0" max="500"></label>
+  <label>Time zone<input id="tz" type="text" style="width:140px"></label>
+  <label>Year<input id="year" class="num" type="number"></label>
+  </div></details>
+  <span class="row actions" style="margin-left:auto">
+    <button id="shareBtn" disabled>Share link</button>
+    <button id="pngBtn" disabled>Export PNG</button>
+    <button id="pdfBtn" disabled>Export PDF</button>
+  </span>
+</div>
+
+<main>
+  <section class="card">
+    <div id="map"></div>
+    <div id="status">Pick a point to start.</div>
+    <div class="bar"><div id="prog"></div></div>
+  </section>
+
+  <section class="card">
+    <h2>Horizon &amp; sun paths <span class="sub" id="hzInfo"></span></h2>
+    <div id="hzChart" class="chartwrap"></div>
+    <div class="legend">
+      <span><i style="background:#a7b0bc;height:9px"></i>terrain</span>
+      <span>21 Jun<span class="grad"></span>21 Dec</span>
+      <span><i style="background:#1d232b"></i>selected day (dots = full hours)</span>
+      <span><i style="background:repeating-linear-gradient(90deg,#999 0 4px,transparent 4px 7px)"></i>sun hidden</span>
+      <span>↑ first / ↓ last direct sun</span>
+      <span id="altLeg" style="display:none"><i style="background:repeating-linear-gradient(90deg,#2f6fb3 0 5px,transparent 5px 8px)"></i><span id="altLegTxt"></span></span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="xBtn" disabled>Cross-check with other elevation data</button>
+      <a id="pvgisLink" href="#" target="_blank" rel="noopener" class="sub" style="display:none">PVGIS horizon (EU JRC) ↗</a>
+    </div>
+    <div id="xcheck"></div>
+  </section>
+
+  <section class="card full">
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section class="card full">
+    <h2>Direct sun per day over the year</h2>
+    <div id="yrChart" class="chartwrap"></div>
+    <div class="legend">
+      <span><i style="background:#e9e6df;height:9px"></i>day length with flat horizon</span>
+      <span><i style="background:#f6c26b;height:9px"></i>direct sun with real terrain</span>
+      <span id="altLeg2" style="display:none"><i style="background:#2f6fb3"></i>other elevation data</span>
+      <span>Click the chart to pick a day.</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Selected day</h2>
+    <div class="row"><input type="date" id="day"><button id="prevD">◀</button><button id="nextD">▶</button></div>
+    <div id="dayOut" style="margin-top:10px"></div>
+  </section>
+
+  <section class="card">
+    <h2>Months <span class="sub">(average h/day · times on the 15th)</span></h2>
+    <div class="scroll"><table id="mTab"></table></div>
+  </section>
+
+  <section class="card full">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Compare locations</h2>
+      <div class="row">
+        <input id="saveName" type="text" placeholder="Name (e.g. Hütte A)" style="width:200px">
+        <button id="saveBtn" disabled>+ Add current</button>
+        <button id="copyBtn">Copy table</button>
+      </div>
+    </div>
+    <div class="scroll" style="margin-top:8px"><table id="cmpTab"></table></div>
+  </section>
+
+  <section class="card full notes">
+    <h2>How it works &amp; limits</h2>
+    <ul>
+      <li><b>Terrain:</b> default is <a href="https://mapterhorn.com" target="_blank" rel="noopener">Mapterhorn</a>: national airborne-LiDAR terrain models where open (AT ~1 m, DE ~1 m, CH 0.5–2 m, IT 2–10 m, …), Copernicus GLO-30 elsewhere. Alternative: Terrain Tiles on AWS (Mapzen/Joerd: EU-DEM 30 m, AT 10 m, SRTM). Rays every 0.5° of azimuth out to the chosen range, finest tiles near the point, earth curvature with refraction coefficient 0.13.</li>
+      <li><b>Sun:</b> NOAA solar position algorithm with refraction; the sun counts as visible when its centre is above the terrain horizon (2-min steps, 1-min for the selected day).</li>
+      <li><b>Not included:</b> trees, buildings (both models are bare earth), clouds and fog. Results are clear-sky <i>potential</i>. A forest edge or a neighbouring house can remove low winter sun completely — check on site, or raise “height above ground”.</li>
+      <li><b>Point on a slope or ridge:</b> the model elevation at the exact point can be off (especially with 30 m data). If you know the real elevation, set “Elevation override”. “Ignore terrain &lt;” stops the point shading itself through pixel noise.</li>
+      <li><b>Cross-check:</b> the button recomputes everything with the other elevation source and shows the difference. Large differences = treat the result with care. Further references: PVGIS horizon (EU JRC), <a href="https://www.peakfinder.com" target="_blank" rel="noopener">PeakFinder</a> panorama, <a href="https://shademap.app" target="_blank" rel="noopener">ShadeMap</a> / <a href="https://shadowmap.org" target="_blank" rel="noopener">Shadowmap</a> (incl. buildings).</li>
+    </ul>
+  </section>
+</main>
+<footer>Sun Exposure Checker v2.1 · map © OpenStreetMap contributors · elevation © Mapterhorn / Terrain Tiles</footer>
+
+<script>
+"use strict";
+// ---------- constants & helpers ----------
+const rad=Math.PI/180, deg=180/Math.PI, R_E=6371000, K_REFR=0.13;
+const AZ_RES=0.5, N_AZ=360/AZ_RES;
+const COL={ink:'#1d232b',mute:'#6b7280',grid:'#ececec',terr:'#5b6472',terrf:'#a7b0bc',sun:'#e8890c',sun2:'#f6c26b',flat:'#e9e6df',blue:'#2f6fb3',hidden:'#9a9a9a'};
+const FONT='-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif';
+const SOURCES={
+  mapterhorn:{id:'mapterhorn',short:'Mapterhorn',size:512,url:(z,x,y)=>`https://tiles.mapterhorn.com/${z}/${x}/${y}.webp`,
+    bands:[{z:14,r:2000},{z:12,r:8000},{z:10,r:30000},{z:9,r:Infinity}]},
+  aws:{id:'aws',short:'AWS Terrain Tiles',size:256,url:(z,x,y)=>`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
+    bands:[{z:14,r:1500},{z:13,r:5000},{z:11,r:25000},{z:10,r:Infinity}]}
+};
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmtH=h=>{if(!isFinite(h))return'–';const m=Math.round(h*60);return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`};
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let state={pt:null,src:'mapterhorn',h0:null,demElev:null,horizon:null,hzPts:null,year:null,days:null,sel:null,alt:null};
+
+// ---------- sun position (NOAA) ----------
+function refraction(e){ if(e<-1.5) return 0; return 1.02/Math.tan((e+10.3/(e+5.11))*rad)/60; }
+function sunPos(t,lat,lon){
+  const jd=t/86400000+2440587.5, T=(jd-2451545)/36525;
+  const L0=((280.46646+T*(36000.76983+T*0.0003032))%360+360)%360;
+  const M=357.52911+T*(35999.05029-0.0001537*T), Mr=M*rad;
+  const e=0.016708634-T*(0.000042037+0.0000001267*T);
+  const C=Math.sin(Mr)*(1.914602-T*(0.004817+0.000014*T))+Math.sin(2*Mr)*(0.019993-0.000101*T)+Math.sin(3*Mr)*0.000289;
+  const om=(125.04-1934.136*T)*rad;
+  const lam=(L0+C-0.00569-0.00478*Math.sin(om))*rad;
+  const eps0=23+(26+(21.448-T*(46.815+T*(0.00059-T*0.001813)))/60)/60;
+  const eps=(eps0+0.00256*Math.cos(om))*rad;
+  const decl=Math.asin(Math.sin(eps)*Math.sin(lam));
+  let y=Math.tan(eps/2);y*=y;const L0r=L0*rad;
+  const eqT=4*deg*(y*Math.sin(2*L0r)-2*e*Math.sin(Mr)+4*e*y*Math.sin(Mr)*Math.cos(2*L0r)-0.5*y*y*Math.sin(4*L0r)-1.25*e*e*Math.sin(2*Mr));
+  const utcMin=((t/60000)%1440+1440)%1440;
+  const tst=((utcMin+eqT+4*lon)%1440+1440)%1440;
+  const H=(tst/4-180)*rad, phi=lat*rad;
+  const cz=clamp(Math.sin(phi)*Math.sin(decl)+Math.cos(phi)*Math.cos(decl)*Math.cos(H),-1,1);
+  const el=90-Math.acos(cz)*deg;
+  let az=Math.atan2(Math.sin(H),Math.cos(H)*Math.sin(phi)-Math.tan(decl)*Math.cos(phi))*deg+180;
+  az=(az%360+360)%360;
+  return {az,el:el+refraction(el)};
+}
+
+// ---------- time zone helpers ----------
+const dtfCache={};
+function tzOffsetMin(t,tz){
+  if(!dtfCache[tz]) dtfCache[tz]=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric'});
+  const p={};for(const x of dtfCache[tz].formatToParts(new Date(t)))p[x.type]=x.value;
+  return Math.round((Date.UTC(+p.year,+p.month-1,+p.day,+p.hour%24,+p.minute)-Math.floor(t/60000)*60000)/60000);
+}
+function fmtT(t,tz){ if(t==null)return'–'; return new Intl.DateTimeFormat('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit'}).format(new Date(t)); }
+function getTZ(){ const v=$('tz').value.trim(); try{new Intl.DateTimeFormat('en',{timeZone:v});return v;}catch(e){return Intl.DateTimeFormat().resolvedOptions().timeZone;} }
+
+// ---------- DEM tiles ----------
+const tiles=new Map();
+const lonPx=(lon,z,S)=>(lon+180)/360*S*2**z;
+const latPx=(lat,z,S)=>{const s=Math.sin(lat*rad);return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*S*2**z};
+const tkey=(src,z,x,y)=>{const n=2**z;return `${src.id}/${z}/${((x%n)+n)%n}/${y}`;};
+async function loadTile(src,z,x,y){
+  const key=tkey(src,z,x,y); if(tiles.has(key)) return;
+  const n=2**z;
+  try{
+    const r=await fetch(src.url(z,((x%n)+n)%n,y),{mode:'cors'});
+    if(!r.ok) throw new Error(r.status);
+    const bmp=await createImageBitmap(await r.blob());
+    const S=src.size, c=document.createElement('canvas');c.width=c.height=S;
+    const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(bmp,0,0,S,S);
+    const d=g.getImageData(0,0,S,S).data, a=new Float32Array(S*S);
+    for(let i=0;i<S*S;i++){const j=i*4;a[i]=d[j]*256+d[j+1]+d[j+2]/256-32768;}
+    tiles.set(key,a);
+  }catch(e){tiles.set(key,null);}
+}
+function pix(src,z,px,py){
+  const S=src.size, tx=Math.floor(px/S), ty=Math.floor(py/S);
+  const a=tiles.get(tkey(src,z,tx,ty)); if(!a) return NaN;
+  return a[(py-ty*S)*S+(px-tx*S)];
+}
+function elevAtZ(src,lat,lon,z){
+  const S=src.size, fx=lonPx(lon,z,S)-0.5, fy=latPx(lat,z,S)-0.5, x0=Math.floor(fx), y0=Math.floor(fy), dx=fx-x0, dy=fy-y0;
+  const a=pix(src,z,x0,y0),b=pix(src,z,x0+1,y0),c=pix(src,z,x0,y0+1),d=pix(src,z,x0+1,y0+1);
+  return (a*(1-dx)+b*dx)*(1-dy)+(c*(1-dx)+d*dx)*dy;
+}
+function elevAt(src,lat,lon,z){ // falls back to coarser loaded zooms where fine tiles are missing
+  let v=elevAtZ(src,lat,lon,z); if(isFinite(v)) return v;
+  for(const b of src.bands){ if(b.z<z){ v=elevAtZ(src,lat,lon,b.z); if(isFinite(v)) return v; } }
+  return NaN;
+}
+function bands(src,maxD){ const out=[];let prev=0;for(const x of src.bands){if(prev>=maxD)break;out.push({z:x.z,r:Math.min(x.r,maxD)});prev=x.r;}return out; }
+async function loadAround(src,lat,lon,maxD,onProg){
+  const list=[],S=src.size;
+  for(const {z,r} of bands(src,maxD)){
+    const dLat=r/111320, dLon=r/(111320*Math.cos(lat*rad));
+    const x0=Math.floor(lonPx(lon-dLon,z,S)/S), x1=Math.floor(lonPx(lon+dLon,z,S)/S);
+    const y0=Math.floor(latPx(Math.min(85,lat+dLat),z,S)/S), y1=Math.floor(latPx(Math.max(-85,lat-dLat),z,S)/S);
+    for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)list.push([z,x,y]);
+  }
+  let done=0;const todo=list.slice();
+  async function worker(){while(todo.length){const [z,x,y]=todo.shift();await loadTile(src,z,x,y);done++;onProg&&onProg(done,list.length);}}
+  await Promise.all(Array.from({length:10},worker));
+  const coarse=bands(src,maxD).slice(1).map(b=>b.z); // missing fine tiles are expected (fallback); only coarse misses are real gaps
+  const failed=list.filter(([z,x,y])=>tiles.get(tkey(src,z,x,y))===null&&coarse.includes(z)).length;
+  const fineMissing=list.filter(([z,x,y])=>tiles.get(tkey(src,z,x,y))===null&&!coarse.includes(z)).length;
+  return {total:list.length,failed,fineMissing};
+}
+
+// ---------- horizon ----------
+function destPt(lat,lon,az,d){
+  const p1=lat*rad,l1=lon*rad,th=az*rad,dl=d/R_E;
+  const p2=Math.asin(Math.sin(p1)*Math.cos(dl)+Math.cos(p1)*Math.sin(dl)*Math.cos(th));
+  const l2=l1+Math.atan2(Math.sin(th)*Math.sin(dl)*Math.cos(p1),Math.cos(dl)-Math.sin(p1)*Math.sin(p2));
+  return [p2*deg,l2*deg];
+}
+function computeHorizon(src,lat,lon,h0,maxD,dMin){
+  const bs=bands(src,maxD), cosl=Math.cos(lat*rad), pxm=z=>156543.03*cosl/2**z*256/src.size;
+  const hz=new Float32Array(N_AZ), pts=new Array(N_AZ);
+  for(let i=0;i<N_AZ;i++){
+    const az=i*AZ_RES; let best=-90,bd=0,bp=null,d=Math.max(dMin,3);
+    while(d<=maxD){
+      let z=bs[bs.length-1].z; for(const b of bs){if(d<=b.r){z=b.z;break;}}
+      const [la,lo]=destPt(lat,lon,az,d), h=elevAt(src,la,lo,z);
+      if(isFinite(h)){
+        const a=Math.atan2(h-d*d/(2*R_E)*(1-K_REFR)-h0,d)*deg;
+        if(a>best){best=a;bd=d;bp=[la,lo,h];}
+      }
+      d+=Math.max(pxm(z)*0.5,d*0.006);
+    }
+    hz[i]=best>-90?best:0; pts[i]={d:bd,p:bp};
+  }
+  return {hz,pts};
+}
+function hzAt(az,hz){
+  hz=hz||state.horizon; const f=((az%360)+360)%360/AZ_RES, i=Math.floor(f)%N_AZ, j=(i+1)%N_AZ, t=f-Math.floor(f);
+  return hz[i]*(1-t)+hz[j]*t;
+}
+
+// ---------- sun-hours computation ----------
+function analyseDay(y,doy,lat,lon,stepMin,hz){
+  const step=stepMin*60000, t0=Date.UTC(y,0,1+doy)-lon/15*3600000; // local mean solar midnight
+  let vis=0,flat=0,cur=null,win=[],noonEl=-90;
+  for(let k=0,n=1440/stepMin;k<n;k++){
+    const t=t0+(k+0.5)*step, p=sunPos(t,lat,lon);
+    if(p.el>noonEl)noonEl=p.el;
+    if(p.el>0)flat++;
+    if(p.el>hzAt(p.az,hz)&&p.el>-2){vis++; if(!cur)cur=[t-step/2,t+step/2]; else cur[1]=t+step/2;}
+    else if(cur){win.push(cur);cur=null;}
+  }
+  if(cur)win.push(cur);
+  return {doy,eff:vis*stepMin/60,flat:flat*stepMin/60,win,noonEl,t0};
+}
+function analyseYear(hz){
+  const {lat,lon}=state.pt, y=state.year, nd=(y%4===0&&(y%100!==0||y%400===0))?366:365, days=[];
+  for(let d=0;d<nd;d++)days.push(analyseDay(y,d,lat,lon,2,hz));
+  return days;
+}
+const doyOf=(y,m,d)=>Math.round((Date.UTC(y,m,d)-Date.UTC(y,0,1))/86400000);
+function stats(D){
+  const y=state.year, sum=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+  const range=(m0,m1)=>D.filter(d=>{const m=new Date(Date.UTC(y,0,1+d.doy)).getUTCMonth();return m0<=m1?(m>=m0&&m<=m1):(m>=m0||m<=m1);});
+  const win=range(10,1), sumr=range(4,7);
+  return {annual:sum(D,d=>d.eff),annualFlat:sum(D,d=>d.flat),winAvg:sum(win,d=>d.eff)/win.length,winFlat:sum(win,d=>d.flat)/win.length,
+    sumAvg:sum(sumr,d=>d.eff)/sumr.length,sumFlat:sum(sumr,d=>d.flat)/sumr.length,
+    dec:D[doyOf(y,11,21)],jun:D[doyOf(y,5,21)],mar:D[doyOf(y,2,20)],zero:D.filter(d=>d.eff===0).length};
+}
+
+// ---------- map ----------
+const map=L.map('map').setView([47.3,11.4],8);
+const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA) | DEM © Mapterhorn / Terrain Tiles'}).addTo(map);
+const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
+const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Imagery © Esri'});
+L.control.layers({'OpenTopoMap':topo,'OpenStreetMap':osm,'Satellite (Esri)':sat}).addTo(map);
+let marker=null, hzLayer=L.layerGroup().addTo(map);
+map.on('click',e=>setPoint(e.latlng.lat,e.latlng.lng,true));
+function setPoint(lat,lon,run){
+  state.pt={lat,lon};
+  $('q').value=`${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  if(!marker){marker=L.marker([lat,lon],{draggable:true}).addTo(map);marker.on('dragend',()=>{const p=marker.getLatLng();setPoint(p.lat,p.lng,true);});}
+  else marker.setLatLng([lat,lon]);
+  if(run) runAll();
+}
+function drawMapHorizon(){
+  hzLayer.clearLayers();
+  const ring=[];for(let i=0;i<N_AZ;i+=2){const p=state.hzPts[i];if(p&&p.p)ring.push([p.p[0],p.p[1]]);}
+  L.polygon(ring,{color:COL.sun,weight:1.5,fillOpacity:0.05,dashArray:'4 4',interactive:false}).addTo(hzLayer);
+}
+
+// ---------- input parsing / search ----------
+function parseCoords(s){
+  const dms=s.match(/(\d+)[°\s]+(\d+)['′\s]+([\d.,]+)?["″]?\s*([NS])[\s,;]*(\d+)[°\s]+(\d+)['′\s]+([\d.,]+)?["″]?\s*([EWO])/i);
+  if(dms){const f=(a,b,c)=>+a+ +b/60+(c?parseFloat(c.replace(',','.')):0)/3600;
+    let la=f(dms[1],dms[2],dms[3]),lo=f(dms[5],dms[6],dms[7]);if(/s/i.test(dms[4]))la=-la;if(/w/i.test(dms[8]))lo=-lo;return [la,lo];}
+  const nums=s.match(/-?\d{1,3}\.\d+/g);
+  if(nums&&nums.length>=2){const la=+nums[0],lo=+nums[1];if(Math.abs(la)<=90&&Math.abs(lo)<=180)return [la,lo];}
+  return null;
+}
+async function go(){
+  const s=$('q').value.trim(); if(!s){if(state.pt)runAll();return;}
+  const c=parseCoords(s);
+  if(c){map.setView(c,Math.max(map.getZoom(),13));setPoint(c[0],c[1],true);return;}
+  setStatus('Searching “'+esc(s)+'” …');
+  try{
+    const j=await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(s))).json();
+    if(!j.length){setStatus('Nothing found for “'+esc(s)+'”.');return;}
+    $('saveName').value=j[0].display_name.split(',')[0];
+    map.setView([+j[0].lat,+j[0].lon],14); setPoint(+j[0].lat,+j[0].lon,true);
+  }catch(e){setStatus('Search failed – paste coordinates instead.');}
+}
+$('go').onclick=go; $('q').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+['hag','elevOv','range','dmin','tz','year','src'].forEach(id=>$(id).addEventListener('change',()=>{if(state.pt)runAll();}));
+function setStatus(t){$('status').innerHTML=t;}
+function setProg(f){$('prog').style.width=(f*100).toFixed(0)+'%';}
+function params(){return {maxD:clamp(+$('range').value||60,5,150)*1000, dMin:Math.max(0,+$('dmin').value||0), hag:+$('hag').value||0, ov:$('elevOv').value.trim()};}
+
+// ---------- main run ----------
+let runId=0;
+async function runAll(){
+  const id=++runId; const {lat,lon}=state.pt, P=params(), src=SOURCES[$('src').value]||SOURCES.mapterhorn;
+  state.src=src.id; state.year=+$('year').value||new Date().getFullYear(); state.alt=null; renderXcheck();
+  ['saveBtn','xBtn','pngBtn','pdfBtn','shareBtn'].forEach(b=>$(b).disabled=true);
+  setStatus(`Loading ${src.short} elevation tiles …`);setProg(0);
+  const res=await loadAround(src,lat,lon,P.maxD,(a,b)=>{if(id===runId){setProg(a/b*0.8);setStatus(`Loading ${src.short} elevation tiles ${a}/${b} …`);}});
+  if(id!==runId)return;
+  const dem=elevAt(src,lat,lon,src.bands[0].z); state.demElev=dem;
+  if(!isFinite(dem)){setStatus('<span class="warn">Could not load elevation data (offline, or the page runs inside a sandbox that blocks external requests). Open the file directly in Safari/Chrome.</span>');return;}
+  state.h0=(P.ov!==''?+P.ov:dem)+P.hag;
+  setStatus('Computing horizon …');setProg(0.85); await new Promise(r=>setTimeout(r,20));
+  const {hz,pts}=computeHorizon(src,lat,lon,state.h0,P.maxD,P.dMin);
+  if(id!==runId)return;
+  state.horizon=hz;state.hzPts=pts;
+  setStatus('Computing sun hours …');setProg(0.93); await new Promise(r=>setTimeout(r,20));
+  state.days=analyseYear(hz);
+  if(id!==runId)return;
+  if(state.sel==null){const n=new Date();state.sel=doyOf(state.year,n.getMonth(),n.getDate());}
+  state.sel=Math.min(state.sel,state.days.length-1);
+  drawMapHorizon();renderAll();setProg(1);
+  setStatus(`${lat.toFixed(5)}, ${lon.toFixed(5)} · ${src.short} elevation ${dem.toFixed(0)} m${P.ov!==''?` (override ${(+P.ov).toFixed(0)} m)`:''} · eye ${state.h0.toFixed(0)} m · ${res.total} tiles${res.fineMissing?` (no high-res data for ${res.fineMissing} near tiles → 30 m fallback)`:''}${res.failed?`, <span class="warn">${res.failed} missing</span>`:''}`);
+  ['saveBtn','xBtn','pngBtn','pdfBtn','shareBtn'].forEach(b=>$(b).disabled=false);
+  const pv=$('pvgisLink');pv.href=`https://re.jrc.ec.europa.eu/api/v5_3/printhorizon?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&outputformat=json`;pv.style.display='';
+  try{const n=$('saveName').value.trim();history.replaceState(null,'',`#${lat.toFixed(5)},${lon.toFixed(5)}`+(n?';'+encodeURIComponent(n):''));}catch(e){}
+}
+
+// ---------- cross-check with the other DEM ----------
+$('xBtn').onclick=async()=>{
+  const id=runId, other=state.src==='mapterhorn'?SOURCES.aws:SOURCES.mapterhorn, P=params(), {lat,lon}=state.pt;
+  $('xBtn').disabled=true; $('xcheck').innerHTML=`<div class="sub" style="margin-top:6px">Loading ${other.short} …</div>`;
+  await loadAround(other,lat,lon,P.maxD);
+  if(id!==runId)return;
+  const dem=elevAt(other,lat,lon,other.bands[0].z);
+  if(!isFinite(dem)){$('xcheck').innerHTML='<div class="warn">Other elevation data could not be loaded.</div>';$('xBtn').disabled=false;return;}
+  const h0=(P.ov!==''?+P.ov:dem)+P.hag;
+  await new Promise(r=>setTimeout(r,20));
+  const {hz}=computeHorizon(other,lat,lon,h0,P.maxD,P.dMin);
+  const days=analyseYear(hz);
+  if(id!==runId)return;
+  state.alt={src:other,dem,h0,hz,days};
+  renderXcheck();renderHorizonChart();renderYearChart();$('xBtn').disabled=false;
+};
+function xcheckRows(){
+  if(!state.alt)return null;
+  const a=SOURCES[state.src],b=state.alt.src, sa=stats(state.days), sb=stats(state.alt.days);
+  let maxd=0,maxaz=0,sum=0,sumS=0,nS=0;
+  for(let i=0;i<N_AZ;i++){const d=state.alt.hz[i]-state.horizon[i];if(Math.abs(d)>Math.abs(maxd)){maxd=d;maxaz=i*AZ_RES;}sum+=Math.abs(d);const az=i*AZ_RES;if(az>=90&&az<=270){sumS+=Math.abs(d);nS++;}}
+  const row=(name,dem,h0,hz,s)=>[name,dem.toFixed(0),h0.toFixed(0),hzAt(180,hz).toFixed(1)+'°',fmtH(s.dec.eff),fmtH(s.winAvg),fmtH(s.sumAvg),Math.round(s.annual)];
+  const rows=[row(a.short+' (main)',state.demElev,state.h0,state.horizon,sa),row(b.short,state.alt.dem,state.alt.h0,state.alt.hz,sb)];
+  const dYear=Math.abs(sb.annual-sa.annual)/sa.annual*100, dDec=Math.abs(sb.dec.eff-sa.dec.eff)*60;
+  const verdict=(sumS/nS<0.5&&dDec<=20)?'good agreement':(sumS/nS<1.5&&dDec<=45)?'moderate agreement – check the marked direction':'large difference – verify on site';
+  return {head:['Source','Elev. m','Eye m','S horizon','21 Dec h','Winter Ø','Summer Ø','Year h'],rows,
+    summary:`Horizon difference: Ø ${(sum/N_AZ).toFixed(2)}° (E–S–W Ø ${(sumS/nS).toFixed(2)}°), max ${maxd>0?'+':''}${maxd.toFixed(1)}° at ${maxaz.toFixed(0)}° az · 21 Dec Δ ${dDec.toFixed(0)} min · year Δ ${dYear.toFixed(1)} %`,
+    verdict,good:verdict.startsWith('good')};
+}
+function renderXcheck(){
+  const x=xcheckRows(); $('altLeg').style.display=x?'':'none'; $('altLeg2').style.display=x?'':'none';
+  if(!x){$('xcheck').innerHTML='';return;}
+  $('altLegTxt').textContent=state.alt.src.short+' horizon';
+  $('xcheck').innerHTML=`<table><tr>${x.head.map(h=>`<th>${h}</th>`).join('')}</tr>${x.rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table>
+   <div class="sub" style="margin-top:5px">${x.summary} → <b class="${x.good?'ok':'warn'}">${x.verdict}</b></div>`;
+}
+
+// ---------- rendering ----------
+function renderAll(){renderKPIs();renderHorizonChart();renderYearChart();renderDay();renderMonths();renderXcheck();}
+function kpiList(){
+  const s=stats(state.days),tz=getTZ();
+  const win=d=>d.win.length?`${fmtT(d.win[0][0],tz)} – ${fmtT(d.win[d.win.length-1][1],tz)}${d.win.length>1?` (${d.win.length} windows)`:''}`:'no direct sun';
+  return [
+    {l:'21 Dec – direct sun',v:fmtH(s.dec.eff)+' h',s:`flat ${fmtH(s.dec.flat)} h · ${win(s.dec)}`},
+    {l:'20 Mar – direct sun',v:fmtH(s.mar.eff)+' h',s:`flat ${fmtH(s.mar.flat)} h · ${win(s.mar)}`},
+    {l:'21 Jun – direct sun',v:fmtH(s.jun.eff)+' h',s:`flat ${fmtH(s.jun.flat)} h · ${win(s.jun)}`},
+    {l:'Winter Nov–Feb Ø/day',v:fmtH(s.winAvg)+' h',s:`${Math.round(s.winAvg/s.winFlat*100)} % of flat horizon`},
+    {l:'Summer May–Aug Ø/day',v:fmtH(s.sumAvg)+' h',s:`${Math.round(s.sumAvg/s.sumFlat*100)} % of flat horizon`},
+    {l:'Year – potential sun hours',v:Math.round(s.annual).toLocaleString('en')+' h',s:`${Math.round(s.annual/s.annualFlat*100)} % of flat (${Math.round(s.annualFlat).toLocaleString('en')} h)`},
+    {l:'Days without direct sun',v:String(s.zero),s:s.zero?'sun-hole period':'',warn:s.zero>0}
+  ];
+}
+function renderKPIs(){ $('kpis').innerHTML=kpiList().map(k=>`<div class="kpi"><div class="l">${k.l}</div><div class="v">${k.v}</div><div class="s ${k.warn?'warn':''}">${k.s}</div></div>`).join(''); }
+
+function sunPath(doy,stepMin,hz){
+  const {lat,lon}=state.pt,y=state.year,t0=Date.UTC(y,0,1+doy)-lon/15*3600000,out=[];
+  for(let m=0;m<=1440;m+=stepMin){const t=t0+m*60000,p=sunPos(t,lat,lon);out.push({t,az:p.az,el:p.el,vis:p.el>hzAt(p.az,hz)&&p.el>-2});}
+  return out;
+}
+const STOPS=[[214,75,60],[233,168,37],[59,120,201]]; // Jun → equinox → Dec
+function gradCol(t){const s=t<0.5?0:1,u=t<0.5?t*2:(t-0.5)*2,a=STOPS[s],b=STOPS[s+1];return `rgb(${a.map((v,i)=>Math.round(v+(b[i]-v)*u)).join(',')})`;}
+const PATH_DATES=[[5,21,'Jun'],[4,21,'May/Jul'],[3,20,'Apr/Aug'],[2,20,'Mar/Sep'],[1,20,'Feb/Oct'],[0,21,'Jan/Nov'],[11,21,'Dec']];
+
+function horizonSVG(outW){
+  const W=760,H=350,ml=34,mr=10,mt=14,mb=26,pw=W-ml-mr,ph=H-mt-mb,hz=state.horizon,tz=getTZ();
+  let hmax=0,hmin=0;for(const v of hz){hmax=Math.max(hmax,v);hmin=Math.min(hmin,v);}
+  const paths=PATH_DATES.map(([m,d])=>sunPath(doyOf(state.year,m,d),2));
+  const smax=Math.max(...paths[0].map(p=>p.el));
+  const yMax=Math.ceil(Math.max(hmax,smax,20)/10)*10+5, yMin=Math.floor(Math.min(hmin,-2));
+  const X=az=>ml+az/360*pw, Y=e=>mt+(yMax-e)/(yMax-yMin)*ph;
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" ${outW?`width="${outW}" height="${Math.round(outW*H/W)}"`:'width="100%"'} style="display:block;font-family:${FONT}"><rect width="${W}" height="${H}" fill="#fff"/>`;
+  for(let e=Math.ceil(yMin/10)*10;e<=yMax;e+=10)s+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(e)}" y2="${Y(e)}" stroke="${COL.grid}"/><text x="${ml-5}" y="${Y(e)+4}" font-size="10" text-anchor="end" fill="#888">${e}°</text>`;
+  ['N','NE','E','SE','S','SW','W','NW','N'].forEach((l,i)=>{const x=X(i*45);s+=`<line x1="${x}" x2="${x}" y1="${mt}" y2="${H-mb}" stroke="${COL.grid}"/><text x="${x}" y="${H-8}" font-size="11" text-anchor="middle" fill="#666">${l}</text>`;});
+  // gradient band between consecutive monthly sun paths (terrain is drawn on top)
+  const above=p=>p.filter(q=>q.el>-1);
+  for(let i=0;i<paths.length-1;i++){
+    const A=above(paths[i]),B=above(paths[i+1]); if(A.length<2||B.length<2)continue;
+    const pts=A.concat(B.slice().reverse()); let jump=false;
+    for(let k=1;k<A.length;k++)if(Math.abs(A[k].az-A[k-1].az)>180)jump=true;
+    for(let k=1;k<B.length;k++)if(Math.abs(B[k].az-B[k-1].az)>180)jump=true;
+    if(jump)continue;
+    s+=`<polygon points="${pts.map(q=>X(q.az).toFixed(1)+','+Y(Math.max(q.el,yMin)).toFixed(1)).join(' ')}" fill="${gradCol((i+0.5)/6)}" fill-opacity=".22" stroke="none"/>`;
+  }
+  // terrain
+  let d=`M${X(0)},${Y(yMin)}`;for(let i=0;i<=N_AZ;i++)d+=`L${X(i*AZ_RES).toFixed(1)},${Y(hz[i%N_AZ]).toFixed(1)}`;d+=`L${X(360)},${Y(yMin)}Z`;
+  s+=`<path d="${d}" fill="${COL.terrf}" stroke="${COL.terr}" stroke-width="1"/>`;
+  s+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(0)}" y2="${Y(0)}" stroke="#777" stroke-dasharray="2 3" stroke-width=".7"/>`;
+  if(state.alt){let p='';for(let i=0;i<=N_AZ;i++)p+=(i?'L':'M')+X(i*AZ_RES).toFixed(1)+','+Y(state.alt.hz[i%N_AZ]).toFixed(1);s+=`<path d="${p}" fill="none" stroke="${COL.blue}" stroke-width="1.4" stroke-dasharray="5 3"/>`;}
+  // path lines
+  const line=(pts,col,w)=>{let out='',seg=[],vis=null,prevX=null;const flush=()=>{if(seg.length>1)out+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${vis?col:COL.hidden}" stroke-width="${vis?w:0.9}" ${vis?'':'stroke-dasharray="3 3"'} stroke-linejoin="round"/>`;};
+    for(const p of pts){ if(p.el<yMin){flush();seg=[];prevX=null;vis=null;continue;}
+      const x=X(p.az),y=Y(p.el);
+      if(vis!==null&&(p.vis!==vis||Math.abs(x-prevX)>pw/2)){const keep=Math.abs(x-prevX)<=pw/2;flush();seg=keep?[seg[seg.length-1]]:[];}
+      vis=p.vis;seg.push(x.toFixed(1)+','+y.toFixed(1));prevX=x;}
+    flush();return out;};
+  const halo=`stroke="#fff" stroke-width="3" paint-order="stroke"`;
+  paths.forEach((p,i)=>{const col=gradCol(i/6),key=i===0||i===3||i===6;s+=line(p,col,key?2.2:1.1);
+    const top=p.reduce((a,b)=>b.el>a.el?b:a);s+=`<text x="${X(top.az)}" y="${Y(top.el)+(i===6?14:-5)}" font-size="${key?10.5:9}" font-weight="${key?600:400}" text-anchor="middle" fill="${col}" ${halo}>${PATH_DATES[i][2]}</text>`;});
+  const selP=sunPath(state.sel,2); s+=line(selP,COL.ink,2.6);
+  const off=tzOffsetMin(selP[360].t,tz);
+  for(const p of selP){const lm=((p.t/60000+off)%1440+1440)%1440; if(lm%60===0&&p.el>yMin+1){const x=X(p.az),y=Y(p.el);
+    s+=`<circle cx="${x}" cy="${y}" r="2.6" fill="${p.vis?COL.ink:'#aaa'}"/><text x="${x}" y="${y+12}" font-size="8.5" text-anchor="middle" fill="#444" ${halo}>${lm/60}</text>`;}}
+  // first / last direct sun markers
+  const mark=(pts,col,below)=>{const v=pts.filter(q=>q.vis);if(!v.length)return '';const f=v[0],l=v[v.length-1];let o='';
+    for(const [q,up] of [[f,true],[l,false]]){const x=X(q.az),y=Y(q.el);
+      o+=`<circle cx="${x}" cy="${y}" r="3.6" fill="${col}" stroke="#fff" stroke-width="1.2"/><text x="${x+(up?-6:6)}" y="${below?y+15:y-5}" font-size="10" font-weight="600" text-anchor="${up?'end':'start'}" fill="${col}" ${halo}>${up?'↑':'↓'}${fmtT(q.t,tz)}</text>`;}
+    return o;};
+  s+=mark(paths[0],gradCol(0))+mark(paths[3],gradCol(0.5))+mark(paths[6],gradCol(1));
+  const keyDoys=[0,3,6].map(i=>doyOf(state.year,PATH_DATES[i][0],PATH_DATES[i][1]));
+  if(!keyDoys.includes(state.sel))s+=mark(selP,COL.ink,true);
+  return s+'</svg>';
+}
+function renderHorizonChart(){
+  const hc=$('hzChart'),first=!hc.firstChild;hc.innerHTML=horizonSVG();
+  if(first&&hc.scrollWidth>hc.clientWidth)hc.scrollLeft=(hc.scrollWidth-hc.clientWidth)/2;
+  const hz=state.horizon;let mi=0;for(let i=0;i<N_AZ;i++)if(hz[i]>hz[mi])mi=i;
+  const p=state.hzPts[mi];
+  $('hzInfo').textContent=`· highest ${hz[mi].toFixed(1)}° at ${(mi*AZ_RES).toFixed(0)}°${p&&p.p?` (${(p.d/1000).toFixed(1)} km, ${p.p[2].toFixed(0)} m)`:''} · south ${hzAt(180).toFixed(1)}°`;
+}
+
+function yearSVG(outW){
+  const D=state.days,W=1000,H=230,ml=34,mr=8,mt=10,mb=24,pw=W-ml-mr,ph=H-mt-mb;
+  const ymax=Math.ceil(Math.max(...D.map(d=>d.flat))+0.5);
+  const X=i=>ml+i/(D.length-1)*pw,Y=h=>mt+(ymax-h)/ymax*ph;
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" ${outW?`width="${outW}" height="${Math.round(outW*H/W)}"`:'width="100%"'} style="display:block;font-family:${FONT}"><rect width="${W}" height="${H}" fill="#fff"/>`;
+  for(let h=0;h<=ymax;h+=2)s+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(h)}" y2="${Y(h)}" stroke="${COL.grid}"/><text x="${ml-5}" y="${Y(h)+4}" font-size="10" text-anchor="end" fill="#888">${h}h</text>`;
+  MONTHS.forEach((m,i)=>{const x=X(doyOf(state.year,i,1));s+=`<line x1="${x}" x2="${x}" y1="${mt}" y2="${H-mb}" stroke="#f3f3f3"/><text x="${x+3}" y="${H-7}" font-size="10.5" fill="#666">${m}</text>`;});
+  const area=f=>{let p=`M${X(0)},${Y(0)}`;D.forEach((d,i)=>p+=`L${X(i).toFixed(1)},${Y(f(d)).toFixed(1)}`);return p+`L${X(D.length-1)},${Y(0)}Z`;};
+  s+=`<path d="${area(d=>d.flat)}" fill="${COL.flat}"/><path d="${area(d=>d.eff)}" fill="${COL.sun2}" stroke="${COL.sun}" stroke-width="1"/>`;
+  if(state.alt){let p='';state.alt.days.forEach((d,i)=>p+=(i?'L':'M')+X(i).toFixed(1)+','+Y(d.eff).toFixed(1));s+=`<path d="${p}" fill="none" stroke="${COL.blue}" stroke-width="1.2"/>`;}
+  const xs=X(state.sel);s+=`<line x1="${xs}" x2="${xs}" y1="${mt}" y2="${H-mb}" stroke="${COL.ink}" stroke-width="1.2"/>`;
+  return s+`<rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="transparent" style="cursor:crosshair"/></svg>`;
+}
+function renderYearChart(){
+  $('yrChart').innerHTML=yearSVG();
+  const svg=$('yrChart').querySelector('svg'),D=state.days;
+  svg.addEventListener('click',e=>{const r=svg.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*1000,i=Math.round((x-34)/958*(D.length-1));if(i>=0&&i<D.length){state.sel=i;renderSel();}});
+}
+function renderSel(){renderHorizonChart();renderYearChart();renderDay();}
+
+function dayInfo(){
+  const y=state.year,dt=new Date(Date.UTC(y,0,1+state.sel)),r=analyseDay(y,state.sel,state.pt.lat,state.pt.lon,1),tz=getTZ();
+  let sr=null,ss=null,prev=null;for(let m=0;m<=1440;m++){const t=r.t0+m*60000,e=sunPos(t,state.pt.lat,state.pt.lon).el>0;if(prev!==null){if(e&&!prev)sr=t;if(!e&&prev)ss=t;}prev=e;}
+  return {dt,r,sr,ss,tz,label:dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric',timeZone:'UTC'})};
+}
+function renderDay(){
+  const {dt,r,sr,ss,tz,label}=dayInfo();
+  $('day').value=dt.toISOString().slice(0,10);
+  const pills=r.win.length?r.win.map(w=>`<span class="pill">${fmtT(w[0],tz)} – ${fmtT(w[1],tz)} · ${fmtH((w[1]-w[0])/3600000)} h</span>`).join(''):'<span class="pill off">no direct sun</span>';
+  $('dayOut').innerHTML=`<div><b>${label}</b></div>
+   <div style="margin:6px 0">Direct sun: <b>${fmtH(r.eff)} h</b> &nbsp;<span class="sub">(flat horizon ${fmtH(r.flat)} h → ${r.flat?Math.round(r.eff/r.flat*100):0} %)</span></div>
+   <div>${pills}</div>
+   <div class="sub" style="margin-top:6px">Astronomical sunrise ${fmtT(sr,tz)} · sunset ${fmtT(ss,tz)} · max. sun elevation ${r.noonEl.toFixed(1)}° (${tz})</div>`;
+}
+$('day').addEventListener('change',()=>{const v=$('day').value;if(!v||!state.days)return;const [yy,mm,dd]=v.split('-').map(Number);state.sel=doyOf(yy,mm-1,dd);if(yy!==state.year){$('year').value=yy;runAll();return;}renderSel();});
+$('prevD').onclick=()=>{if(!state.days)return;state.sel=(state.sel-1+state.days.length)%state.days.length;renderSel();};
+$('nextD').onclick=()=>{if(!state.days)return;state.sel=(state.sel+1)%state.days.length;renderSel();};
+
+function monthRows(){
+  const D=state.days,y=state.year,tz=getTZ(),rows=[];
+  for(let m=0;m<12;m++){
+    const ds=D.filter(d=>new Date(Date.UTC(y,0,1+d.doy)).getUTCMonth()===m);
+    const e=ds.reduce((s,d)=>s+d.eff,0)/ds.length,f=ds.reduce((s,d)=>s+d.flat,0)/ds.length,w=D[doyOf(y,m,15)].win;
+    rows.push([MONTHS[m],fmtH(e),fmtH(f),String(Math.round(e/f*100)),w.length?fmtT(w[0][0],tz):'–',w.length?fmtT(w[w.length-1][1],tz):'–']);
+  }
+  return rows;
+}
+const M_HEAD=['Month','Ø sun h','Ø flat h','%','first sun','last sun'];
+function renderMonths(){ $('mTab').innerHTML=`<tr>${M_HEAD.map(h=>`<th>${h}</th>`).join('')}</tr>`+monthRows().map(r=>`<tr>${r.map((c,i)=>`<td>${i===1?`<b>${c}</b>`:c}</td>`).join('')}</tr>`).join(''); }
+
+// ---------- export (PNG / PDF) ----------
+function placeName(){return $('saveName').value.trim()||`${state.pt.lat.toFixed(4)}, ${state.pt.lon.toFixed(4)}`;}
+async function svgImg(svg){
+  const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));
+  try{const img=new Image();await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url;});return img;}finally{setTimeout(()=>URL.revokeObjectURL(url),5000);}
+}
+async function buildReport(){
+  const W=1654,H=2339,M=70,cw=W-2*M,c=document.createElement('canvas');c.width=W;c.height=H;
+  const g=c.getContext('2d'),F=(w,sz)=>`${w} ${sz}px ${FONT}`;
+  g.fillStyle='#fff';g.fillRect(0,0,W,H);
+  let y=M+30;
+  g.fillStyle=COL.ink;g.font=F(700,44);g.fillText('☀ '+placeName(),M,y);
+  y+=42;g.font=F(400,22);g.fillStyle=COL.mute;
+  const P=params();
+  g.fillText(`${state.pt.lat.toFixed(5)}, ${state.pt.lon.toFixed(5)} · elevation ${state.demElev.toFixed(0)} m${P.ov!==''?` (override ${P.ov} m)`:''} · eye +${P.hag} m · ${SOURCES[state.src].short} · horizon ${P.maxD/1000} km · times ${getTZ()} · ${state.year}`,M,y);
+  // KPIs
+  y+=30;const K=kpiList(),cols=4,gap=18,bw=(cw-gap*(cols-1))/cols,bh=122;
+  K.forEach((k,i)=>{const bx=M+(i%cols)*(bw+gap),by=y+Math.floor(i/cols)*(bh+gap);
+    g.strokeStyle='#ddd';g.lineWidth=2;g.beginPath();g.roundRect?g.roundRect(bx,by,bw,bh,14):g.rect(bx,by,bw,bh);g.stroke();
+    g.fillStyle=COL.mute;g.font=F(500,19);g.fillText(k.l,bx+16,by+32);
+    g.fillStyle=COL.ink;g.font=F(700,36);g.fillText(k.v,bx+16,by+74);
+    g.fillStyle=k.warn?'#9a3b00':COL.mute;g.font=F(400,16);fitText(g,k.s,bx+16,by+104,bw-28);});
+  // compare-ready summary in the 8th box
+  {const i=7,bx=M+(i%cols)*(bw+gap),by=y+Math.floor(i/cols)*(bh+gap);const {r,label}=dayInfo();
+    g.fillStyle='#fdf5e8';g.beginPath();g.roundRect?g.roundRect(bx,by,bw,bh,14):g.rect(bx,by,bw,bh);g.fill();
+    g.fillStyle=COL.mute;g.font=F(500,19);g.fillText('Selected day',bx+16,by+32);
+    g.fillStyle=COL.ink;g.font=F(700,36);g.fillText(fmtH(r.eff)+' h',bx+16,by+74);
+    g.fillStyle=COL.mute;g.font=F(400,16);fitText(g,`${label} · ${r.win.length?r.win.map(w=>fmtT(w[0],getTZ())+'–'+fmtT(w[1],getTZ())).join(', '):'no sun'}`,bx+16,by+104,bw-28);}
+  y+=2*bh+gap+40;
+  // horizon chart
+  g.fillStyle=COL.ink;g.font=F(650,26);g.fillText('Horizon & sun paths',M,y);
+  g.font=F(400,17);g.fillStyle=COL.mute;g.fillText('Bands: 21 Jun (red) → equinox (amber) → 21 Dec (blue) · black = selected day, dots = full hours · ↑/↓ first/last direct sun · dashed grey = sun behind terrain'+(state.alt?` · blue dashed = ${state.alt.src.short}`:''),M,y+26);
+  y+=40;const hzW=cw,hzImg=await svgImg(horizonSVG(hzW)),hzH=Math.round(hzW*350/760);g.drawImage(hzImg,M,y,hzW,hzH);y+=hzH+40;
+  // year chart
+  g.fillStyle=COL.ink;g.font=F(650,26);g.fillText('Direct sun per day (orange) vs. flat horizon (grey)',M,y);y+=14;
+  const yrH=Math.round(cw*230/1000),yrImg=await svgImg(yearSVG(cw));g.drawImage(yrImg,M,y,cw,yrH);y+=yrH+40;
+  // months table + cross-check / notes
+  g.fillStyle=COL.ink;g.font=F(650,26);g.fillText('Months (Ø per day · times on the 15th)',M,y);
+  const tx=[0,150,290,430,520,660].map(v=>M+v),rh=31;let ty=y+38;
+  g.font=F(600,18);g.fillStyle=COL.mute;M_HEAD.forEach((h,i)=>g.fillText(h,tx[i],ty));
+  g.font=F(400,19);monthRows().forEach(r=>{ty+=rh;g.fillStyle='#eee';g.fillRect(M,ty-23,780,1);g.fillStyle=COL.ink;r.forEach((v,i)=>{g.font=F(i===1?700:400,19);g.fillText(v,tx[i],ty);});});
+  const rx=M+840,rw=cw-840;let ry=y;
+  const x=xcheckRows();
+  if(x){g.fillStyle=COL.ink;g.font=F(650,22);g.fillText('Cross-check elevation data',rx,ry);ry+=34;
+    g.font=F(400,17);x.rows.forEach(r=>{g.fillStyle=COL.ink;fitText(g,`${r[0]}: elev ${r[1]} m · S ${r[3]} · Dec ${r[4]} h · winter ${r[5]} · year ${r[7]} h`,rx,ry,rw);ry+=26;});
+    g.fillStyle=COL.mute;ry=wrapText(g,x.summary,rx,ry,rw,24);g.fillStyle=x.good?'#2c7a3f':'#9a3b00';g.font=F(650,18);g.fillText('→ '+x.verdict,rx,ry);ry+=40;}
+  g.fillStyle=COL.ink;g.font=F(650,22);g.fillText('Notes',rx,ry);ry+=30;g.font=F(400,16);g.fillStyle='#444';
+  for(const n of ['Clear-sky potential: clouds, fog, trees and buildings are not included (bare-earth terrain model).',
+    'Sun visible when its centre is above the terrain horizon; refraction and earth curvature applied.',
+    'Elevation data: '+(state.src==='mapterhorn'?'Mapterhorn (national LiDAR where available, Copernicus GLO-30 elsewhere).':'Terrain Tiles on AWS (Mapzen/Joerd: EU-DEM, national DEMs, SRTM).'),
+    'Map data © OpenStreetMap contributors.'])ry=wrapText(g,'• '+n,rx,ry,rw,22)+6;
+  g.fillStyle='#999';g.font=F(400,15);g.fillText(`Sun Exposure Checker · generated ${new Date().toLocaleString('en-GB')}`,M,H-40);
+  return c;
+}
+function fitText(g,t,x,y,w){let s=t;while(g.measureText(s).width>w&&s.length>4)s=s.slice(0,-2);if(s!==t)s=s.slice(0,-1)+'…';g.fillText(s,x,y);}
+function wrapText(g,t,x,y,w,lh){let line='';for(const word of t.split(' ')){const test=line?line+' '+word:word;if(g.measureText(test).width>w&&line){g.fillText(line,x,y);y+=lh;line=word;}else line=test;}if(line){g.fillText(line,x,y);y+=lh;}return y;}
+const fileBase=()=>'sun-'+placeName().toLowerCase().replace(/[^a-z0-9äöüß]+/gi,'-').replace(/^-|-$/g,'').slice(0,40);
+function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);}
+$('pngBtn').onclick=async()=>{
+  const b=$('pngBtn');b.textContent='Rendering …';
+  try{const c=await buildReport();c.toBlob(async bl=>{await deliver(bl,fileBase()+'.png');b.textContent='Export PNG';},'image/png');}
+  catch(e){b.textContent='Export PNG';setStatus('<span class="warn">Export failed: '+esc(e.message||e)+'</span>');}
+};
+const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+async function deliver(blob,name){ // iOS/Android: share sheet (save to Files, AirDrop, WhatsApp …); desktop: download
+  if(isMobile&&navigator.canShare){const f=new File([blob],name,{type:blob.type});
+    if(navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:name});return;}catch(e){if(e.name==='AbortError')return;}}}
+  download(blob,name);
+}
+function loadScript(u){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=u;s.onload=res;s.onerror=()=>rej(new Error('could not load '+u));document.head.appendChild(s);});}
+$('pdfBtn').onclick=async()=>{
+  const b=$('pdfBtn');b.textContent='Rendering …';
+  try{
+    if(!window.jspdf)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const c=await buildReport(),doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    doc.addImage(c.toDataURL('image/jpeg',0.93),'JPEG',0,0,210,297);
+    doc.setProperties({title:'Sun exposure – '+placeName()});
+    await deliver(doc.output('blob'),fileBase()+'.pdf');
+  }catch(e){setStatus('<span class="warn">Export failed: '+esc(e.message||e)+'</span>');}
+  b.textContent='Export PDF';
+};
+
+// ---------- compare list ----------
+let saved=[];try{saved=JSON.parse(localStorage.getItem('sunexp_saved')||'[]');}catch(e){}
+function persist(){try{localStorage.setItem('sunexp_saved',JSON.stringify(saved));}catch(e){}}
+const CMP_HEAD=['Name','Lat','Lon','Elev m','DEM','21 Dec h','Dec window','20 Mar h','21 Jun h','Winter Ø h','Summer Ø h','Year h','% of flat','0-sun days'];
+const CMP_KEYS=['name','lat','lon','elev','dem','dec','decWin','mar','jun','win','sum','year','pct','zero'];
+function renderCmp(){
+  let h='<tr>'+CMP_HEAD.map(x=>`<th>${x}</th>`).join('')+'<th></th></tr>';
+  saved.forEach((r,i)=>{h+=`<tr><td><a href="#" data-go="${i}">${esc(r.name)}</a></td><td>${r.lat.toFixed(4)}</td><td>${r.lon.toFixed(4)}</td><td>${r.elev}</td><td>${r.dem||''}</td><td><b>${r.dec}</b></td><td>${r.decWin}</td><td>${r.mar}</td><td>${r.jun}</td><td><b>${r.win}</b></td><td>${r.sum}</td><td>${r.year}</td><td>${r.pct}</td><td>${r.zero}</td><td><button data-del="${i}" title="remove">✕</button></td></tr>`;});
+  if(!saved.length)h+='<tr><td colspan="15" class="sub">Analyse a point and press “+ Add current” to build a comparison (stored in this browser).</td></tr>';
+  $('cmpTab').innerHTML=h;
+  $('cmpTab').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{saved.splice(+b.dataset.del,1);persist();renderCmp();});
+  $('cmpTab').querySelectorAll('[data-go]').forEach(a=>a.onclick=e=>{e.preventDefault();const r=saved[+a.dataset.go];map.setView([r.lat,r.lon],14);$('saveName').value=r.name;setPoint(r.lat,r.lon,true);});
+}
+$('saveBtn').onclick=()=>{
+  const s=stats(state.days),tz=getTZ(),w=s.dec.win;
+  saved.push({name:$('saveName').value.trim()||`Point ${saved.length+1}`,lat:state.pt.lat,lon:state.pt.lon,elev:Math.round(state.h0-(+$('hag').value||0)),dem:SOURCES[state.src].short,
+    dec:fmtH(s.dec.eff),decWin:w.length?`${fmtT(w[0][0],tz)}–${fmtT(w[w.length-1][1],tz)}`:'–',mar:fmtH(s.mar.eff),jun:fmtH(s.jun.eff),
+    win:fmtH(s.winAvg),sum:fmtH(s.sumAvg),year:Math.round(s.annual),pct:Math.round(s.annual/s.annualFlat*100),zero:s.zero});
+  persist();renderCmp();
+};
+$('copyBtn').onclick=async()=>{
+  const tsv=[CMP_HEAD.join('\t')].concat(saved.map(r=>CMP_KEYS.map(k=>r[k]??'').join('\t'))).join('\n');
+  try{await navigator.clipboard.writeText(tsv);$('copyBtn').textContent='Copied ✓';}catch(e){$('copyBtn').textContent='Copy failed';}
+  setTimeout(()=>$('copyBtn').textContent='Copy table',1500);
+};
+
+// ---------- phone helpers ----------
+$('locBtn').onclick=()=>{
+  if(!navigator.geolocation){setStatus('Location not available in this browser.');return;}
+  setStatus('Getting your location …');
+  navigator.geolocation.getCurrentPosition(p=>{const {latitude:la,longitude:lo,accuracy:ac}=p.coords;
+      if(!$('saveName').value)$('saveName').value='My location';map.setView([la,lo],15);setPoint(la,lo,true);
+      if(ac>30)setTimeout(()=>{if(!/Loading|Computing/.test($('status').textContent))$('status').insertAdjacentHTML('beforeend',` · <span class="warn">GPS accuracy ±${Math.round(ac)} m</span>`);},4000);},
+    e=>setStatus('<span class="warn">Location failed: '+esc(e.message)+' – allow location for Safari in iOS Settings → Privacy → Location Services.</span>'),
+    {enableHighAccuracy:true,timeout:20000,maximumAge:0});
+};
+$('shareBtn').onclick=async()=>{
+  const n=$('saveName').value.trim(),url=location.origin+location.pathname+`#${state.pt.lat.toFixed(5)},${state.pt.lon.toFixed(5)}`+(n?';'+encodeURIComponent(n):'');
+  if(navigator.share){try{await navigator.share({title:'Sun exposure – '+(n||'location'),url});return;}catch(e){if(e.name==='AbortError')return;}}
+  try{await navigator.clipboard.writeText(url);$('shareBtn').textContent='Link copied ✓';setTimeout(()=>$('shareBtn').textContent='Share link',1500);}catch(e){setStatus('Link: '+esc(url));}
+};
+if(matchMedia('(min-width:701px)').matches)$('opts').open=true;
+
+// ---------- init ----------
+$('tz').value=Intl.DateTimeFormat().resolvedOptions().timeZone;
+$('year').value=new Date().getFullYear();
+renderCmp();
+(function(){const h=decodeURIComponent(location.hash.slice(1)),[co,nm]=h.split(';');const c=parseCoords(co||'');if(c){if(nm)$('saveName').value=nm;map.setView(c,13);setPoint(c[0],c[1],true);}})();
+</script>
+</body>
+</html>
